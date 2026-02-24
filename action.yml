@@ -1,0 +1,42 @@
+name: "FreeFlowCI"
+description: "Deploy to InfinityFree via FTP using LFTP"
+author: "Frost-bit-star"
+
+branding:
+  icon: "upload-cloud"
+  color: "blue"
+
+inputs:
+  ftp_username:
+    description: "InfinityFree FTP username"
+    required: true
+
+  ftp_password:
+    description: "InfinityFree FTP password"
+    required: true
+
+# Server is hardcoded
+# ftp_server = ftpupload.net
+# Remote directory defaults to htdocs
+runs:
+  using: "composite"
+  steps:
+    - name: Install LFTP
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt install -y lftp
+
+    - name: Deploy to InfinityFree
+      shell: bash
+      run: |
+        FTP_SERVER="ftpupload.net"
+        FTP_DIR="htdocs"
+
+        lftp -u "${{ inputs.ftp_username }}","${{ inputs.ftp_password }}" $FTP_SERVER <<EOF
+        set ftp:passive-mode on
+        set ssl:verify-certificate no
+        cd $FTP_DIR
+        mirror --reverse --delete --verbose .
+        quit
+        EOF
