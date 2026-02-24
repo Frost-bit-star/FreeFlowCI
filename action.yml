@@ -15,28 +15,71 @@ inputs:
     description: "InfinityFree FTP password"
     required: true
 
-# Server is hardcoded
-# ftp_server = ftpupload.net
-# Remote directory defaults to htdocs
+  deploy_php:
+    description: "Run composer install before deploy (PHP projects)"
+    required: false
+    default: "false"
+
+  deploy_node:
+    description: "Run npm install & build before deploy (Node projects)"
+    required: false
+    default: "false"
+
+  deploy_python:
+    description: "Run pip install before deploy (Python projects)"
+    required: false
+    default: "false"
+
+  ftp_directory:
+    description: "Remote directory to deploy to"
+    required: false
+    default: "htdocs"
+
 runs:
   using: "composite"
   steps:
-    - name: Install LFTP
+    - name: Install Required Tools
       shell: bash
       run: |
         sudo apt update
-        sudo apt install -y lftp
+        sudo apt install -y lftp python3-pip nodejs npm php-cli unzip
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        if [ "${{ inputs.deploy_php }}" == "true" ]; then
+          echo "Running composer install..."
+          composer install --no-dev --optimize-autoloader
+        fi
+
+        if [ "${{ inputs.deploy_node }}" == "true" ]; then
+          echo "Running npm install and build..."
+          npm install
+          if [ -f package.json ] && grep -q "\"build\"" package.json; then
+            npm run build
+          fi
+        fi
+
+        if [ "${{ inputs.deploy_python }}" == "true" ]; then
+          echo "Installing Python dependencies..."
+          if [ -f requirements.txt ]; then
+            pip3 install --user -r requirements.txt
+          fi
+        fi
 
     - name: Deploy to InfinityFree
       shell: bash
       run: |
         FTP_SERVER="ftpupload.net"
-        FTP_DIR="htdocs"
+        FTP_DIR="${{ inputs.ftp_directory }}"
 
+        echo "Deploying to $FTP_SERVER/$FTP_DIR..."
+
+        # Use --only-newer for faster incremental deploy
         lftp -u "${{ inputs.ftp_username }}","${{ inputs.ftp_password }}" $FTP_SERVER <<EOF
         set ftp:passive-mode on
         set ssl:verify-certificate no
         cd $FTP_DIR
-        mirror --reverse --delete --verbose .
+        mirror --reverse --delete --verbose --only-newer .
         quit
         EOF
